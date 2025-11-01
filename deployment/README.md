@@ -234,7 +234,7 @@ kind: Deployment
 metadata:
   name: nginx-deployment
   labels:
-    app: nginx
+    app: nginx  # <-- This label is only for the Deployment itself
 spec:
   replicas: 3
   strategy:
@@ -244,11 +244,11 @@ spec:
       maxUnavailable: 1
   selector:
     matchLabels:
-      app: nginx
+      app: nginx # <-- This must match template labels
   template:
     metadata:
       labels:
-        app: nginx
+        app: nginx   # <-- Must match selector
     spec:
       containers:
       - name: nginx
