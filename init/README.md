@@ -68,3 +68,4 @@ kubectl config get-contexts
 # Switch context if needed
 # kubectl config use-context kind-first-cluster
 # kubectl config use-context minikube
+https://kubernetes.io/docs/reference/kubectl/quick-reference/
