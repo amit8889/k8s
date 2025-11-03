@@ -1,83 +1,26 @@
-# Kubernetes ConfigMap Guide
+# Kubernetes Secrets - README
 
-## What is a ConfigMap?
+## Overview
 
-ConfigMap is a Kubernetes object used to store non-sensitive configuration data in key-value pairs. It decouples configuration from container images, making applications more portable.
+Kubernetes Secrets store sensitive data like passwords, API keys, tokens, and certificates. Secrets keep sensitive information separate from application code and container images.
 
-## Creating ConfigMap
+## Why Use Secrets?
 
-### Method 1: From Literal Values
+- **Security**: Separate sensitive data from application code
+- **Flexibility**: Update secrets without rebuilding images
+- **Access Control**: Use RBAC to control who can access secrets
+- **Centralized Management**: Manage all secrets in one place
+
+## Quick Start
+
+### Create a Secret
 ```bash
-kubectl create configmap test-app-config \
-  --from-literal=PORT=4000 \
-  --from-literal=NODE_ENV=production \
-  --from-literal=LOG_LEVEL=info \
-  --from-literal=APP_NAME=test-app
+kubectl create secret generic test-app-secrets \
+  --from-literal=DB_PASSWORD=mysecretpass \
+  --from-literal=API_KEY=abc123xyz
 ```
 
-### Method 2: From YAML File
-
-Create `configmap.yaml`:
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: test-app-config
-  labels:
-    app: test-app
-data:
-  PORT: "4000"
-  NODE_ENV: "production"
-  LOG_LEVEL: "info"
-  APP_NAME: "test-app"
-  DATABASE_HOST: "db.example.com"
-  CACHE_ENABLED: "true"
-```
-
-Apply it:
-```bash
-kubectl apply -f configmap.yaml
-```
-
-### Method 3: From Environment File
-
-Create `.env` file:
-```
-PORT=4000
-NODE_ENV=production
-LOG_LEVEL=info
-APP_NAME=test-app
-```
-
-Create ConfigMap:
-```bash
-kubectl create configmap test-app-config --from-env-file=.env
-```
-
-### Method 4: From File Contents
-
-Create `app-config.json`:
-```json
-{
-  "server": {
-    "port": 4000,
-    "host": "0.0.0.0"
-  },
-  "logging": {
-    "level": "info"
-  }
-}
-```
-
-Create ConfigMap:
-```bash
-kubectl create configmap test-app-config --from-file=app-config.json
-```
-
-## Using ConfigMap in Deployment
-
-### Option 1: Load All Keys as Environment Variables
-
+### Use in Deployment
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -96,118 +39,220 @@ spec:
       containers:
       - name: test-app
         image: my-test-app:latest
-        imagePullPolicy: IfNotPresent
         envFrom:
-          - configMapRef:
-              name: test-app-config
+          - secretRef:
+              name: test-app-secrets
         ports:
         - containerPort: 4000
 ```
 
-### Option 2: Load Specific Keys as Environment Variables
+## Creating Secrets
 
+### Method 1: Command Line
+```bash
+kubectl create secret generic test-app-secrets \
+  --from-literal=DB_PASSWORD=secret123 \
+  --from-literal=API_KEY=key789
+```
+
+### Method 2: YAML File (with stringData)
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-app-secrets
+type: Opaque
+stringData:
+  DB_PASSWORD: "secret123"
+  API_KEY: "key789"
+  JWT_SECRET: "jwt-secret-key"
+```
+
+Apply:
+```bash
+kubectl apply -f secret.yaml
+```
+
+### Method 3: From Environment File
+```bash
+# Create .env.secret file
+DB_PASSWORD=secret123
+API_KEY=key789
+
+# Create secret
+kubectl create secret generic test-app-secrets --from-env-file=.env.secret
+```
+
+## Using Secrets
+
+### As Environment Variables (All Keys)
+```yaml
+spec:
+  containers:
+  - name: test-app
+    image: my-test-app:latest
+    envFrom:
+      - secretRef:
+          name: test-app-secrets
+```
+
+### As Environment Variables (Specific Keys)
 ```yaml
 spec:
   containers:
   - name: test-app
     image: my-test-app:latest
     env:
-      - name: PORT
+      - name: DB_PASSWORD
         valueFrom:
-          configMapKeyRef:
-            name: test-app-config
-            key: PORT
-      - name: NODE_ENV
+          secretKeyRef:
+            name: test-app-secrets
+            key: DB_PASSWORD
+      - name: API_KEY
         valueFrom:
-          configMapKeyRef:
-            name: test-app-config
-            key: NODE_ENV
-      - name: LOG_LEVEL
-        valueFrom:
-          configMapKeyRef:
-            name: test-app-config
-            key: LOG_LEVEL
-    ports:
-    - containerPort: 4000
+          secretKeyRef:
+            name: test-app-secrets
+            key: API_KEY
 ```
 
-### Option 3: Mount as Volume (File)
-
+### As Mounted Files
 ```yaml
 spec:
   containers:
   - name: test-app
     image: my-test-app:latest
     volumeMounts:
-      - name: config-volume
-        mountPath: /etc/config
-    ports:
-    - containerPort: 4000
+      - name: secrets
+        mountPath: /etc/secrets
+        readOnly: true
   volumes:
-    - name: config-volume
-      configMap:
-        name: test-app-config
+    - name: secrets
+      secret:
+        secretName: test-app-secrets
 ```
 
-Files will be available at `/etc/config/PORT`, `/etc/config/NODE_ENV`, etc.
+Access: `/etc/secrets/DB_PASSWORD`, `/etc/secrets/API_KEY`
 
-### Option 4: Mount Specific Keys as Files
+## Common Secret Types
 
+### Database Credentials
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+type: Opaque
+stringData:
+  DB_HOST: "postgres.example.com"
+  DB_PORT: "5432"
+  DB_NAME: "myapp"
+  DB_USER: "appuser"
+  DB_PASSWORD: "secretpassword"
+```
+
+### API Keys
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-keys
+type: Opaque
+stringData:
+  STRIPE_KEY: "sk_test_123456"
+  SENDGRID_KEY: "SG.abc123xyz"
+  AWS_ACCESS_KEY: "AKIAIOSFODNN7EXAMPLE"
+  AWS_SECRET_KEY: "wJalrXUtnFEMI/K7MDENG"
+```
+
+### Docker Registry
+```bash
+kubectl create secret docker-registry regcred \
+  --docker-server=myregistry.com \
+  --docker-username=user \
+  --docker-password=pass
+```
+
+Use in deployment:
 ```yaml
 spec:
+  imagePullSecrets:
+    - name: regcred
   containers:
   - name: test-app
-    image: my-test-app:latest
-    volumeMounts:
-      - name: config-volume
-        mountPath: /etc/config
-  volumes:
-    - name: config-volume
-      configMap:
-        name: test-app-config
-        items:
-          - key: PORT
-            path: port.conf
-          - key: NODE_ENV
-            path: environment.conf
+    image: myregistry.com/test-app:latest
 ```
 
-## Managing ConfigMaps
-
-### View ConfigMaps
+### TLS Certificates
 ```bash
-# List all ConfigMaps
-kubectl get configmaps
-
-# View specific ConfigMap
-kubectl get configmap test-app-config -o yaml
-
-# Describe ConfigMap
-kubectl describe configmap test-app-config
+kubectl create secret tls tls-secret \
+  --cert=server.crt \
+  --key=server.key
 ```
 
-### Update ConfigMap
+## Managing Secrets
+
+### List Secrets
 ```bash
-# Edit directly
-kubectl edit configmap test-app-config
-
-# Or update from file
-kubectl apply -f configmap.yaml
-
-# Replace from literal
-kubectl create configmap test-app-config \
-  --from-literal=PORT=5000 \
-  --dry-run=client -o yaml | kubectl apply -f -
+kubectl get secrets
 ```
 
-### Delete ConfigMap
+### View Secret Details
 ```bash
-kubectl delete configmap test-app-config
+kubectl describe secret test-app-secrets
 ```
 
-## Complete Example for Your Application
+### View Secret Values (Decoded)
+```bash
+kubectl get secret test-app-secrets -o jsonpath='{.data.DB_PASSWORD}' | base64 --decode
+```
 
-**configmap.yaml**
+### Update Secret
+```bash
+# Delete and recreate
+kubectl delete secret test-app-secrets
+kubectl create secret generic test-app-secrets --from-literal=DB_PASSWORD=newpass
+
+# Or edit directly
+kubectl edit secret test-app-secrets
+
+# Or apply updated YAML
+kubectl apply -f secret.yaml
+```
+
+### Delete Secret
+```bash
+kubectl delete secret test-app-secrets
+```
+
+## Complete Example
+
+### secret.yaml
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-app-secrets
+  labels:
+    app: test-app
+type: Opaque
+stringData:
+  # Database
+  DB_HOST: "postgres.example.com"
+  DB_PASSWORD: "P@ssw0rd123"
+  
+  # APIs
+  API_KEY: "sk_live_abc123"
+  JWT_SECRET: "jwt-secret-key-2024"
+  
+  # Redis
+  REDIS_PASSWORD: "redis123"
+  
+  # AWS
+  AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7"
+  AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI"
+```
+
+### configmap.yaml
 ```yaml
 apiVersion: v1
 kind: ConfigMap
@@ -219,11 +264,9 @@ data:
   PORT: "4000"
   NODE_ENV: "production"
   LOG_LEVEL: "info"
-  MAX_CONNECTIONS: "100"
-  TIMEOUT: "30"
 ```
 
-**deployment.yaml (Updated)**
+### deployment.yaml
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -248,6 +291,8 @@ spec:
         envFrom:
           - configMapRef:
               name: test-app-config
+          - secretRef:
+              name: test-app-secrets
         ports:
         - containerPort: 4000
 ---
@@ -268,56 +313,152 @@ spec:
     targetPort: 4000
 ```
 
-## Deploy with ConfigMap
-
+### Deploy
 ```bash
-# Create ConfigMap
+# 1. Create secret
+kubectl apply -f secret.yaml
+
+# 2. Create configmap
 kubectl apply -f configmap.yaml
 
-# Create Deployment
+# 3. Deploy application
 kubectl apply -f deployment.yaml
 
-# Verify ConfigMap is loaded
-kubectl exec -it <pod-name> -- env | grep PORT
+# 4. Verify
+kubectl get pods
+kubectl exec -it <pod-name> -- env | grep DB_PASSWORD
 ```
 
-## Hot Reload ConfigMap Changes
+## Security Best Practices
 
-**Note**: Environment variables from ConfigMaps are NOT automatically updated in running pods. You need to restart pods:
-
+### 1. Never Commit Secrets to Git
 ```bash
+# Add to .gitignore
+secret.yaml
+*.secret
+.env.secret
+```
+
+### 2. Use Different Secrets Per Environment
+```bash
+kubectl create secret generic app-secrets-dev --from-literal=DB_PASSWORD=devpass
+kubectl create secret generic app-secrets-prod --from-literal=DB_PASSWORD=prodpass
+```
+
+### 3. Limit Access with RBAC
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secret-reader
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+```
+
+### 4. Enable Encryption at Rest
+Ensure your cluster encrypts secrets at rest in etcd.
+
+### 5. Rotate Secrets Regularly
+```bash
+# Update secret
+kubectl create secret generic test-app-secrets \
+  --from-literal=DB_PASSWORD=newpassword \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# Restart pods
 kubectl rollout restart deployment test-app-deployment
 ```
 
-For automatic updates, mount ConfigMap as a volume instead of environment variables.
-
-## Best Practices
-
-1. **Separate ConfigMaps** - Create different ConfigMaps for different environments (dev, staging, prod)
-2. **Use Secrets for Sensitive Data** - Never store passwords, API keys, or tokens in ConfigMaps
-3. **Version Control** - Keep ConfigMap YAML files in git
-4. **Naming Convention** - Use descriptive names like `<app-name>-config`
-5. **Validate** - Always verify ConfigMap data before applying
+### 6. Use External Secret Managers (Recommended for Production)
+- AWS Secrets Manager
+- HashiCorp Vault
+- Azure Key Vault
+- Google Secret Manager
 
 ## Troubleshooting
 
-### ConfigMap Not Found
+### Secret Not Found Error
 ```bash
-# Check if ConfigMap exists
-kubectl get configmap test-app-config
+# Check if secret exists
+kubectl get secret test-app-secrets
 
-# If not, create it first
-kubectl apply -f configmap.yaml
+# If missing, create it
+kubectl apply -f secret.yaml
 ```
 
-### Values Not Updating
+### Cannot See Secret Values
 ```bash
-# Restart deployment to pick up changes
+# Decode base64
+kubectl get secret test-app-secrets -o jsonpath='{.data.DB_PASSWORD}' | base64 -d
+```
+
+### Pods Not Starting
+```bash
+# Check pod events
+kubectl describe pod <pod-name>
+
+# Check if secret exists and has correct keys
+kubectl get secret test-app-secrets -o yaml
+```
+
+### Secret Changes Not Reflected
+```bash
+# Environment variables don't auto-update, restart pods
+kubectl rollout restart deployment test-app-deployment
+
+# Or use volume mounts which update automatically
+```
+
+### Verify Secret in Pod
+```bash
+# Check environment variables
+kubectl exec -it <pod-name> -- env | grep -i password
+
+# Check mounted files
+kubectl exec -it <pod-name> -- cat /etc/secrets/DB_PASSWORD
+```
+
+## Key Differences: Secrets vs ConfigMaps
+
+| Feature | Secrets | ConfigMaps |
+|---------|---------|------------|
+| **Purpose** | Sensitive data | Configuration data |
+| **Encoding** | Base64 | Plain text |
+| **Security** | Can be encrypted at rest | Not encrypted |
+| **Use Cases** | Passwords, keys, tokens | App settings, configs |
+| **Size Limit** | 1MB | 1MB |
+
+## Secret Limits
+
+- Maximum size: **1MB** per secret
+- For larger data, split into multiple secrets
+- Consider external secret management for many secrets
+
+## Base64 Encoding
+
+```bash
+# Encode
+echo -n 'mysecret' | base64
+# Output: bXlzZWNyZXQ=
+
+# Decode  
+echo 'bXlzZWNyZXQ=' | base64 -d
+# Output: mysecret
+```
+
+## When to Update Pods
+
+Secrets loaded as **environment variables** require pod restart:
+```bash
 kubectl rollout restart deployment test-app-deployment
 ```
 
-### Check ConfigMap Values in Pod
-```bash
-kubectl exec -it <pod-name> -- env
-kubectl exec -it <pod-name> -- cat /etc/config/PORT
-```
+Secrets mounted as **volumes** update automatically (may take up to 2 minutes).
+
+## Additional Resources
+
+- [Kubernetes Secrets Documentation](https://kubernetes.io/docs/concepts/configuration/secret/)
+- [Secret Management Best Practices](https://kubernetes.io/docs/concepts/security/secrets-good-practices/)
+- [External Secrets Operator](https://external-secrets.io/)
