@@ -1,0 +1,156 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-app-pod
+  labels:
+    app: test-app
+    environment: production
+    version: v1
+spec:
+  # Container configuration
+  containers:
+  - name: test-app
+    image: my-test-app:latest
+    imagePullPolicy: IfNotPresent
+    
+    # Ports
+    ports:
+    - containerPort: 4000
+      name: http
+      protocol: TCP
+    
+    # Environment variables
+    env:
+    - name: PORT
+      value: "4000"
+    - name: NODE_ENV
+      value: "production"
+    
+    # Environment from ConfigMap
+    envFrom:
+    - configMapRef:
+        name: test-app-config
+    - secretRef:
+        name: test-app-secrets
+    
+    # Resource requests and limits
+    resources:
+      requests:
+        cpu: 200m           # Minimum CPU guaranteed (0.2 cores)
+        memory: 256Mi       # Minimum memory guaranteed (256 MiB)
+        ephemeral-storage: 1Gi  # Minimum ephemeral storage
+      limits:
+        cpu: 1000m          # Maximum CPU allowed (1 core)
+        memory: 1Gi         # Maximum memory allowed (1 GiB)
+        ephemeral-storage: 2Gi  # Maximum ephemeral storage
+    
+    # Liveness probe (restart if unhealthy)
+    livenessProbe:
+      httpGet:
+        path: /health
+        port: 4000
+        scheme: HTTP
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      successThreshold: 1
+      failureThreshold: 3
+    
+    # Readiness probe (remove from service if not ready)
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: 4000
+        scheme: HTTP
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      successThreshold: 1
+      failureThreshold: 3
+    
+    # Startup probe (for slow-starting apps)
+    startupProbe:
+      httpGet:
+        path: /health
+        port: 4000
+      initialDelaySeconds: 0
+      periodSeconds: 10
+      timeoutSeconds: 3
+      successThreshold: 1
+      failureThreshold: 30
+    
+    # Volume mounts
+    volumeMounts:
+    - name: config-volume
+      mountPath: /etc/config
+      readOnly: true
+    - name: secret-volume
+      mountPath: /etc/secrets
+      readOnly: true
+    - name: data-volume
+      mountPath: /data
+  
+  # Init containers (run before main container)
+  initContainers:
+  - name: init-db
+    image: busybox:latest
+    command: ['sh', '-c', 'echo "Initializing..." && sleep 5']
+  
+  # Volumes
+  volumes:
+  - name: config-volume
+    configMap:
+      name: test-app-config
+  - name: secret-volume
+    secret:
+      secretName: test-app-secrets
+  - name: data-volume
+    emptyDir: {}
+  
+  # Restart policy
+  # Options: Always (default), OnFailure, Never
+  restartPolicy: Always
+  
+  # Node selection
+  nodeSelector:
+    disktype: ssd
+  
+  # Affinity rules
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+        preference:
+          matchExpressions:
+          - key: node-type
+            operator: In
+            values:
+            - high-performance
+  
+  # Tolerations
+  tolerations:
+  - key: "key1"
+    operator: "Equal"
+    value: "value1"
+    effect: "NoSchedule"
+  
+  # Security context
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 3000
+    fsGroup: 2000
+  
+  # Service account
+  serviceAccountName: test-app-sa
+  
+  # DNS policy
+  dnsPolicy: ClusterFirst
+  
+  # Host aliases
+  hostAliases:
+  - ip: "127.0.0.1"
+    hostnames:
+    - "localhost.localdomain"
+  
+  # Termination grace period
+  terminationGracePeriodSeconds: 30
