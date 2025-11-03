@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app-deployment
+  labels:
+    app: test-app
+spec:
+  replicas: 20
+  selector:
+    matchLabels:
+      app: test-app
+  template:
+    metadata:
+      labels:
+        app: test-app
+    spec:
+      envFrom:
+          - configMapRef:
+              name: test-app-config
+      containers:
+      - name: test-app
+        image: my-test-app:latest
+        imagePullPolicy: IfNotPresent  
+        ports:
+        - containerPort: 4000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-app-loadbalancer
+  labels:
+    app: test-app
+spec:
+  type: LoadBalancer
+  selector:
+    app: test-app
+  ports:
+  - name: http                   
+    protocol: TCP
+    port: 80
+    targetPort: 4000
